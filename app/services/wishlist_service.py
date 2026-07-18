@@ -18,7 +18,18 @@ def add_to_wishlist(db: Session, user_id: int, data: WishlistCreate):
     )
 
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        existing = db.query(Wishlist).filter(
+            Wishlist.user_id == user_id,
+            Wishlist.product_id == data.product_id
+        ).first()
+        if existing:
+            return {"error": "Already in wishlist"}
+        raise
+
     db.refresh(item)
 
     return item

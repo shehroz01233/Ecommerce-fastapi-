@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -25,8 +26,11 @@ def add_to_cart(cart: CartCreate, db: Session = Depends(get_db), current_user: U
     ).first()
 
     if existing:
-        existing.quantity += cart.quantity
-        db.commit()
+        db.execute(
+            text("UPDATE cart SET quantity = quantity + :qty WHERE id = :id"),
+            {"qty": cart.quantity, "id": existing.id}
+        )
+        db.flush()
         db.refresh(existing)
         cache_service.invalidate_user_cart(current_user.id)
         return CartOut(
@@ -43,7 +47,30 @@ def add_to_cart(cart: CartCreate, db: Session = Depends(get_db), current_user: U
     )
 
     db.add(new_item)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        existing = db.query(Cart).filter(
+            Cart.user_id == current_user.id,
+            Cart.product_id == cart.product_id
+        ).first()
+        if existing:
+            db.execute(
+                text("UPDATE cart SET quantity = quantity + :qty WHERE id = :id"),
+                {"qty": cart.quantity, "id": existing.id}
+            )
+            db.commit()
+            db.refresh(existing)
+            cache_service.invalidate_user_cart(current_user.id)
+            return CartOut(
+                id=existing.id, user_id=existing.user_id, product_id=existing.product_id,
+                quantity=existing.quantity, created_at=existing.created_at,
+                product_name=product.name, product_price=product.price,
+                product_image=product.image_url
+            )
+        raise HTTPException(status_code=500, detail="Failed to add to cart")
+
     db.refresh(new_item)
     cache_service.invalidate_user_cart(current_user.id)
 

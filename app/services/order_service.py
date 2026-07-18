@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..models.order import Order, OrderItem
 from ..models.product import Product
@@ -14,11 +15,17 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
         if not product:
             return {"error": f"Product {item.product_id} not found"}
 
-        if product.stock < item.quantity:
+        result = db.execute(
+            text("UPDATE products SET stock = stock - :qty WHERE id = :id AND stock >= :qty"),
+            {"qty": item.quantity, "id": item.product_id}
+        )
+        db.flush()
+
+        if result.rowcount == 0:
+            db.rollback()
             return {"error": f"Not enough stock for {product.name}"}
 
         total_price += product.price * item.quantity
-        product.stock -= item.quantity
         product_cache[item.product_id] = product
 
     order = Order(

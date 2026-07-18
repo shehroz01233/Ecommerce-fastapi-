@@ -20,7 +20,18 @@ def create_review(db: Session, user_id: int, data: ReviewCreate):
     )
 
     db.add(review)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        existing = db.query(Review).filter(
+            Review.user_id == user_id,
+            Review.product_id == data.product_id
+        ).first()
+        if existing:
+            return {"error": "You already reviewed this product"}
+        raise
+
     db.refresh(review)
 
     return review
