@@ -1,26 +1,24 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 
-# ========================
-# CREATE USER (REQUEST)
-# ========================
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
 
 
-# ========================
-# LOGIN (REQUEST)
-# ========================
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
 
-# ========================
-# RESPONSE MODEL (SAFE OUTPUT)
-# ========================
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
+
 class UserOut(BaseModel):
     id: int
     name: str

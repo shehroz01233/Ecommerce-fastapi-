@@ -4,17 +4,12 @@ from ..schemas.user_schema import UserCreate
 from ..core.security import hash_password, verify_password, create_access_token
 
 
-# =========================
-# REGISTER USER
-# =========================
 def register_user(db: Session, user: UserCreate):
-    # check if user already exists
     existing_user = db.query(User).filter(User.email == user.email).first()
 
     if existing_user:
         return {"error": "User already exists"}
 
-    # create new user
     new_user = User(
         name=user.name,
         email=user.email,
@@ -28,30 +23,26 @@ def register_user(db: Session, user: UserCreate):
 
     return {
         "message": "User registered successfully",
-        "user": new_user
+        "user": {
+            "id": new_user.id,
+            "name": new_user.name,
+            "email": new_user.email,
+            "role": new_user.role
+        }
     }
 
 
-# =========================
-# LOGIN USER
-# =========================
 def login_user(db: Session, email: str, password: str):
     user = db.query(User).filter(User.email == email).first()
 
-    # user not found
     if not user:
         return {"error": "Invalid credentials"}
 
-    # password check
     if not verify_password(password, user.password):
         return {"error": "Invalid credentials"}
 
-    # create JWT token
     token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "role": user.role
-        }
+        data={"sub": str(user.id), "role": user.role}
     )
 
     return {
@@ -64,4 +55,26 @@ def login_user(db: Session, email: str, password: str):
             "email": user.email,
             "role": user.role
         }
+    }
+
+
+def update_user_profile(db: Session, user: User, name: str = None, email: str = None, password: str = None):
+    if name:
+        user.name = name
+    if email:
+        existing = db.query(User).filter(User.email == email, User.id != user.id).first()
+        if existing:
+            return {"error": "Email already in use"}
+        user.email = email
+    if password:
+        user.password = hash_password(password)
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role
     }

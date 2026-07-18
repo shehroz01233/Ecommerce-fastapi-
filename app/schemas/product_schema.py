@@ -1,35 +1,33 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
-# ========================
-# CREATE PRODUCT (REQUEST)
-# ========================
 class ProductCreate(BaseModel):
     name: str
     description: str
     price: float
     stock: int
+    category: str = "General"
+    image_url: str = ""
 
 
-# ========================
-# UPDATE PRODUCT (OPTIONAL BUT PROFESSIONAL)
-# ========================
 class ProductUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    price: float | None = None
-    stock: int | None = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    stock: Optional[int] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
 
 
-# ========================
-# PRODUCT RESPONSE (SAFE OUTPUT)
-# ========================
 class ProductOut(BaseModel):
     id: int
     name: str
     description: str
     price: float
     stock: int
+    category: str
+    image_url: str
 
     class Config:
         from_attributes = True

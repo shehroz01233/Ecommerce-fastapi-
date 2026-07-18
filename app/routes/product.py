@@ -1,63 +1,131 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from ..core.database import get_db
-from ..schemas.product_schema import ProductCreate, ProductUpdate
+from ..core.security import get_current_user, require_admin
+from ..models.user import User
+from ..schemas.product_schema import ProductCreate, ProductUpdate, ProductOut
 from ..services import product_service
+from ..services.cache_service import cache_service
+from ..services.notification_service import notification_service
+from ..services.background_tasks import process_stock_alert
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
-# =========================
-# CREATE PRODUCT
-# =========================
-@router.post("/")
-def create(product: ProductCreate, db: Session = Depends(get_db)):
-    return product_service.create_product(db, product)
+@router.post("/", response_model=ProductOut)
+def create(product: ProductCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    new_product = product_service.create_product(db, product)
+    cache_service.invalidate_products()
+    cache_service.invalidate_categories()
+    notification_service.notify_admin_alert(
+        f"New product added: {new_product.name}", "product"
+    )
+    return new_product
 
 
-# =========================
-# GET ALL PRODUCTS
-# =========================
-@router.get("/")
-def get_all(db: Session = Depends(get_db)):
-    return product_service.get_all_products(db)
+@router.get("/", response_model=list[ProductOut])
+def get_all(
+    db: Session = Depends(get_db),
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None)
+):
+    cached = cache_service.get_products(search, category)
+    if cached:
+        return cached
+
+    products = product_service.get_all_products(db, search=search, category=category)
+    result = [
+        {
+            "id": p.id, "name": p.name, "description": p.description,
+            "price": p.price, "stock": p.stock, "category": p.category,
+            "image_url": p.image_url
+        }
+        for p in products
+    ]
+    cache_service.set_products(result, search, category)
+    return result
 
 
-# =========================
-# GET SINGLE PRODUCT
-# =========================
-@router.get("/{product_id}")
+@router.get("/categories")
+def get_categories(db: Session = Depends(get_db)):
+    cached = cache_service.get_categories()
+    if cached:
+        return cached
+
+    categories = product_service.get_categories(db)
+    cache_service.set_categories(categories)
+    return categories
+
+
+@router.get("/{product_id}", response_model=ProductOut)
 def get_one(product_id: int, db: Session = Depends(get_db)):
-    product = product_service.get_product_by_id(db, product_id)
+    cached = cache_service.get_product(product_id)
+    if cached:
+        return cached
 
+    product = product_service.get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    return product
+    result = {
+        "id": product.id, "name": product.name, "description": product.description,
+        "price": product.price, "stock": product.stock, "category": product.category,
+        "image_url": product.image_url
+    }
+    cache_service.set_product(product_id, result)
+    return result
 
 
-# =========================
-# UPDATE PRODUCT
-# =========================
-@router.put("/{product_id}")
-def update(product_id: int, product: ProductUpdate, db: Session = Depends(get_db)):
+@router.get("/{product_id}/rating")
+def get_product_rating(product_id: int, db: Session = Depends(get_db)):
+    cached = cache_service.get_product_rating(product_id)
+    if cached:
+        return cached
+
+    from ..models.review import Review
+    reviews = db.query(Review).filter(Review.product_id == product_id).all()
+    if not reviews:
+        return {"average": 0, "count": 0}
+
+    total = sum(r.rating for r in reviews)
+    result = {"average": round(total / len(reviews), 1), "count": len(reviews)}
+    cache_service.set_product_rating(product_id, result)
+    return result
+
+
+@router.put("/{product_id}", response_model=ProductOut)
+def update(product_id: int, product: ProductUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    old_product = product_service.get_product_by_id(db, product_id)
+    if not old_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    old_price = old_product.price
     updated = product_service.update_product(db, product_id, product)
 
-    if not updated:
-        raise HTTPException(status_code=404, detail="Product not found")
+    cache_service.invalidate_product(product_id)
+
+    if product.price and product.price < old_price:
+        background_tasks.add_task(
+            notification_service.notify_price_drop,
+            product_id, updated.name, old_price, updated.price
+        )
+
+    if product.stock is not None:
+        background_tasks.add_task(process_stock_alert, product_id, updated.name, updated.stock)
 
     return updated
 
 
-# =========================
-# DELETE PRODUCT
-# =========================
 @router.delete("/{product_id}")
-def delete(product_id: int, db: Session = Depends(get_db)):
-    result = product_service.delete_product(db, product_id)
-
-    if not result:
+def delete(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    product = product_service.get_product_by_id(db, product_id)
+    if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    result = product_service.delete_product(db, product_id)
+    cache_service.invalidate_product(product_id)
+    notification_service.notify_admin_alert(f"Product deleted: {product.name}", "product")
     return result
