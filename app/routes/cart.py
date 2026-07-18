@@ -9,6 +9,7 @@ from ..schemas.cart_schema import CartCreate, CartUpdate, CartOut
 from ..models.cart import Cart
 from ..models.product import Product
 from ..services.cache_service import cache_service
+from datetime import datetime
 
 router = APIRouter(prefix="/cart", tags=["Cart"])
 
@@ -31,8 +32,9 @@ def add_to_cart(cart: CartCreate, db: Session = Depends(get_db), current_user: U
         cache_service.invalidate_user_cart(current_user.id)
         return CartOut(
             id=existing.id, user_id=existing.user_id, product_id=existing.product_id,
-            quantity=existing.quantity, product_name=product.name,
-            product_price=product.price, product_image=product.image_url
+            quantity=existing.quantity, created_at=existing.created_at,
+            product_name=product.name, product_price=product.price,
+            product_image=product.image_url
         )
 
     new_item = Cart(
@@ -48,8 +50,9 @@ def add_to_cart(cart: CartCreate, db: Session = Depends(get_db), current_user: U
 
     return CartOut(
         id=new_item.id, user_id=new_item.user_id, product_id=new_item.product_id,
-        quantity=new_item.quantity, product_name=product.name,
-        product_price=product.price, product_image=product.image_url
+        quantity=new_item.quantity, created_at=new_item.created_at,
+        product_name=product.name, product_price=product.price,
+        product_image=product.image_url
     )
 
 
@@ -62,12 +65,12 @@ def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_cur
     items = db.query(Cart).filter(Cart.user_id == current_user.id).all()
     result = []
     for item in items:
-        product = db.query(Product).filter(Product.id == item.product_id).first()
         result.append({
             "id": item.id, "user_id": item.user_id, "product_id": item.product_id,
-            "quantity": item.quantity, "product_name": product.name if product else None,
-            "product_price": product.price if product else None,
-            "product_image": product.image_url if product else None
+            "quantity": item.quantity, "created_at": item.created_at.isoformat() if item.created_at else None,
+            "product_name": item.product.name if item.product else None,
+            "product_price": item.product.price if item.product else None,
+            "product_image": item.product.image_url if item.product else None
         })
 
     cache_service.set_user_cart(current_user.id, result)
@@ -85,12 +88,12 @@ def update_cart_item(cart_id: int, data: CartUpdate, db: Session = Depends(get_d
     db.refresh(item)
     cache_service.invalidate_user_cart(current_user.id)
 
-    product = db.query(Product).filter(Product.id == item.product_id).first()
     return CartOut(
         id=item.id, user_id=item.user_id, product_id=item.product_id,
-        quantity=item.quantity, product_name=product.name if product else None,
-        product_price=product.price if product else None,
-        product_image=product.image_url if product else None
+        quantity=item.quantity, created_at=item.created_at,
+        product_name=item.product.name if item.product else None,
+        product_price=item.product.price if item.product else None,
+        product_image=item.product.image_url if item.product else None
     )
 
 

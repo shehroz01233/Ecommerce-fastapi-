@@ -1,4 +1,3 @@
-import json
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -97,23 +96,23 @@ def get_product_rating(product_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{product_id}", response_model=ProductOut)
-def update(product_id: int, product: ProductUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def update(product_id: int, updated_data: ProductUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     old_product = product_service.get_product_by_id(db, product_id)
     if not old_product:
         raise HTTPException(status_code=404, detail="Product not found")
 
     old_price = old_product.price
-    updated = product_service.update_product(db, product_id, product)
+    updated = product_service.update_product(db, product_id, updated_data)
 
     cache_service.invalidate_product(product_id)
 
-    if product.price and product.price < old_price:
+    if updated_data.price and updated_data.price < old_price:
         background_tasks.add_task(
             notification_service.notify_price_drop,
             product_id, updated.name, old_price, updated.price
         )
 
-    if product.stock is not None:
+    if updated_data.stock is not None:
         background_tasks.add_task(process_stock_alert, product_id, updated.name, updated.stock)
 
     return updated

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
 
 @router.post("/", response_model=ReviewOut)
-def create_review(data: ReviewCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_review(data: ReviewCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = review_service.create_review(db, current_user.id, data)
 
     if isinstance(result, dict) and "error" in result:
@@ -23,7 +23,7 @@ def create_review(data: ReviewCreate, db: Session = Depends(get_db), current_use
 
     cache_service.invalidate_product_rating(data.product_id)
 
-    process_review_notification(data.product_id, current_user.name, data.rating)
+    background_tasks.add_task(process_review_notification, data.product_id, current_user.name, data.rating)
 
     return ReviewOut(
         id=result.id, user_id=result.user_id, product_id=result.product_id,
@@ -35,28 +35,27 @@ def create_review(data: ReviewCreate, db: Session = Depends(get_db), current_use
 @router.get("/product/{product_id}", response_model=List[ReviewOut])
 def get_product_reviews(product_id: int, db: Session = Depends(get_db)):
     reviews = review_service.get_product_reviews(db, product_id)
-    result = []
-    for r in reviews:
-        user = db.query(User).filter(User.id == r.user_id).first()
-        result.append(ReviewOut(
+    return [
+        ReviewOut(
             id=r.id, user_id=r.user_id, product_id=r.product_id,
             rating=r.rating, comment=r.comment, created_at=r.created_at,
-            user_name=user.name if user else None
-        ))
-    return result
+            user_name=r.user.name if r.user else None
+        )
+        for r in reviews
+    ]
 
 
 @router.get("/user/me", response_model=List[ReviewOut])
 def get_my_reviews(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     reviews = review_service.get_user_reviews(db, current_user.id)
-    result = []
-    for r in reviews:
-        result.append(ReviewOut(
+    return [
+        ReviewOut(
             id=r.id, user_id=r.user_id, product_id=r.product_id,
             rating=r.rating, comment=r.comment, created_at=r.created_at,
             user_name=current_user.name
-        ))
-    return result
+        )
+        for r in reviews
+    ]
 
 
 @router.delete("/{review_id}")

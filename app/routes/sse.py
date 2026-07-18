@@ -1,8 +1,9 @@
 import json
 import asyncio
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 from ..core.redis import redis_manager
+from ..core.security import decode_access_token
 from ..services.notification_service import NotificationService
 
 router = APIRouter(tags=["SSE"])
@@ -28,10 +29,9 @@ async def event_generator(channel: str, user_id: int = None):
             pubsub.subscribe(channel)
 
         while True:
-            message = pubsub.get_message(timeout=1.0)
+            message = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
             if message and message["type"] == "message":
-                data = message["data"]
-                yield f"data: {data}\n\n"
+                yield f"data: {message['data']}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
             await asyncio.sleep(0.5)
@@ -47,8 +47,21 @@ async def event_generator(channel: str, user_id: int = None):
                 pass
 
 
+def _verify_sse_token(request: Request) -> dict:
+    token = request.query_params.get("token", "")
+    if not token:
+        return None
+    return decode_access_token(token)
+
+
 @router.get("/sse/stock-updates")
-async def sse_stock_updates():
+async def sse_stock_updates(request: Request):
+    payload = _verify_sse_token(request)
+    if not payload:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
+            media_type="text/event-stream"
+        )
     return StreamingResponse(
         event_generator(NotificationService.CHANNELS["stock_updates"]),
         media_type="text/event-stream",
@@ -57,7 +70,13 @@ async def sse_stock_updates():
 
 
 @router.get("/sse/price-drops")
-async def sse_price_drops():
+async def sse_price_drops(request: Request):
+    payload = _verify_sse_token(request)
+    if not payload:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
+            media_type="text/event-stream"
+        )
     return StreamingResponse(
         event_generator(NotificationService.CHANNELS["price_drops"]),
         media_type="text/event-stream",
@@ -66,7 +85,13 @@ async def sse_price_drops():
 
 
 @router.get("/sse/flash-sales")
-async def sse_flash_sales():
+async def sse_flash_sales(request: Request):
+    payload = _verify_sse_token(request)
+    if not payload:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
+            media_type="text/event-stream"
+        )
     return StreamingResponse(
         event_generator(NotificationService.CHANNELS["flash_sales"]),
         media_type="text/event-stream",
@@ -75,7 +100,13 @@ async def sse_flash_sales():
 
 
 @router.get("/sse/user/{user_id}")
-async def sse_user_notifications(user_id: int):
+async def sse_user_notifications(user_id: int, request: Request):
+    payload = _verify_sse_token(request)
+    if not payload or int(payload.get("sub", 0)) != user_id:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
+            media_type="text/event-stream"
+        )
     return StreamingResponse(
         event_generator("user", user_id=user_id),
         media_type="text/event-stream",
@@ -84,7 +115,13 @@ async def sse_user_notifications(user_id: int):
 
 
 @router.get("/sse/admin")
-async def sse_admin():
+async def sse_admin(request: Request):
+    payload = _verify_sse_token(request)
+    if not payload or payload.get("role") != "ADMIN":
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Admin access required'})}\n\n"]),
+            media_type="text/event-stream"
+        )
     return StreamingResponse(
         event_generator(NotificationService.CHANNELS["admin_alerts"]),
         media_type="text/event-stream",

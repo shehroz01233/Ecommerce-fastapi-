@@ -8,22 +8,17 @@ from ..services import auth_service
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-# =========================
-# REGISTER
-# =========================
 @router.post("/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    return auth_service.register_user(db, user)
+    result = auth_service.register_user(db, user)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 
 
-# =========================
-# LOGIN
-# =========================
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
     result = auth_service.login_user(db, user.email, user.password)
-
     if "error" in result:
         raise HTTPException(status_code=401, detail=result["error"])
-
     return result

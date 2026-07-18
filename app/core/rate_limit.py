@@ -1,4 +1,5 @@
-from fastapi import Request, HTTPException
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from ..core.redis import redis_manager
 
@@ -37,9 +38,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         current_count = redis_manager.increment_rate_limit(rate_key, limit_config["window"])
 
         if current_count > limit_config["limit"]:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=429,
-                detail="Too many requests. Please try again later."
+                content={"detail": "Too many requests. Please try again later."}
             )
 
         response = await call_next(request)
