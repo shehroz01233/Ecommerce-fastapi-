@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from ..core.database import get_db
-from ..core.security import get_current_user, require_admin
+from ..core.security import require_admin
 from ..models.user import User
 from ..schemas.product_schema import ProductCreate, ProductUpdate, ProductOut
 from ..services import product_service
@@ -106,7 +106,7 @@ def update(product_id: int, updated_data: ProductUpdate, background_tasks: Backg
 
     cache_service.invalidate_product(product_id)
 
-    if updated_data.price and updated_data.price < old_price:
+    if updated_data.price is not None and updated_data.price < old_price:
         background_tasks.add_task(
             notification_service.notify_price_drop,
             product_id, updated.name, old_price, updated.price

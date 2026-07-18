@@ -6,6 +6,7 @@ from ..schemas.order_schema import OrderCreate
 
 def create_order(db: Session, user_id: int, order_data: OrderCreate):
     total_price = 0
+    product_cache = {}
 
     for item in order_data.items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
@@ -18,6 +19,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
 
         total_price += product.price * item.quantity
         product.stock -= item.quantity
+        product_cache[item.product_id] = product
 
     order = Order(
         user_id=user_id,
@@ -29,11 +31,12 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
     db.flush()
 
     for item in order_data.items:
+        product = product_cache[item.product_id]
         order_item = OrderItem(
             order_id=order.id,
             product_id=item.product_id,
             quantity=item.quantity,
-            price=item.price
+            price=product.price
         )
         db.add(order_item)
 

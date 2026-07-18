@@ -5,7 +5,7 @@ from typing import List
 from ..core.database import get_db
 from ..core.security import get_current_user, require_admin
 from ..models.user import User
-from ..schemas.order_schema import OrderCreate, OrderOut, StatusUpdate, OrderItemOut
+from ..schemas.order_schema import OrderCreate, OrderOut, StatusUpdate
 from ..services import order_service
 from ..services.notification_service import notification_service
 from ..services.background_tasks import process_order_background

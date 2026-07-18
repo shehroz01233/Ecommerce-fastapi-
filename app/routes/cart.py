@@ -9,7 +9,6 @@ from ..schemas.cart_schema import CartCreate, CartUpdate, CartOut
 from ..models.cart import Cart
 from ..models.product import Product
 from ..services.cache_service import cache_service
-from datetime import datetime
 
 router = APIRouter(prefix="/cart", tags=["Cart"])
 
