@@ -47,11 +47,14 @@ async def event_generator(channel: str, user_id: int = None):
                 pass
 
 
-def _verify_sse_token(request: Request) -> dict:
+def _verify_sse_token(request: Request) -> Optional[dict]:
     token = request.query_params.get("token", "")
     if not token:
         return None
-    return decode_access_token(token)
+    try:
+        return decode_access_token(token)
+    except Exception:
+        return None
 
 
 @router.get("/sse/stock-updates")
@@ -102,7 +105,16 @@ async def sse_flash_sales(request: Request):
 @router.get("/sse/user/{user_id}")
 async def sse_user_notifications(user_id: int, request: Request):
     payload = _verify_sse_token(request)
-    if not payload or int(payload.get("sub", 0)) != user_id:
+    if not payload:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
+            media_type="text/event-stream"
+        )
+    try:
+        token_user_id = int(payload.get("sub", 0))
+    except (ValueError, TypeError):
+        token_user_id = 0
+    if token_user_id != user_id:
         return StreamingResponse(
             iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
             media_type="text/event-stream"

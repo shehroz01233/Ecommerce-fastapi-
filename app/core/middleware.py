@@ -71,6 +71,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
@@ -78,8 +79,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     MAX_BODY_SIZE = 5 * 1024 * 1024
+    SKIP_METHODS = {"GET", "HEAD", "OPTIONS", "DELETE"}
 
     async def dispatch(self, request: Request, call_next):
+        if request.method in self.SKIP_METHODS:
+            return await call_next(request)
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > self.MAX_BODY_SIZE:
             request_id = getattr(request.state, "request_id", "unknown")

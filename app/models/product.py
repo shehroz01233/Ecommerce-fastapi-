@@ -7,7 +7,7 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
-    description = Column(String)
+    description = Column(String, default="")
     price = Column(Float, nullable=False, index=True)
     stock = Column(Integer, nullable=False)
     category = Column(String, default="General", index=True)

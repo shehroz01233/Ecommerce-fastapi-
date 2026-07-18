@@ -1,12 +1,11 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import Optional
 from datetime import datetime
 
 
 class OrderItemCreate(BaseModel):
     product_id: int
-    quantity: int
-    price: float
+    quantity: int = Field(..., gt=0)
 
 
 class OrderItemOut(BaseModel):
@@ -20,7 +19,7 @@ class OrderItemOut(BaseModel):
 
 
 class OrderCreate(BaseModel):
-    items: List[OrderItemCreate]
+    items: list[OrderItemCreate] = Field(..., min_length=1)
 
 
 class OrderOut(BaseModel):
@@ -29,11 +28,11 @@ class OrderOut(BaseModel):
     total_price: float
     status: str
     created_at: Optional[datetime] = None
-    items: List[OrderItemOut] = []
+    items: list[OrderItemOut] = []
 
     class Config:
         from_attributes = True
 
 
 class StatusUpdate(BaseModel):
-    status: str
+    status: str = Field(..., pattern="^(PENDING|PROCESSING|SHIPPED|DELIVERED|CANCELLED)$")

@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 
 class ReviewCreate(BaseModel):
     product_id: int
-    rating: int
+    rating: int = Field(..., ge=1, le=5)
     comment: str = ""
 
 

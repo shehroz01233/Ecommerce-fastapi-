@@ -20,14 +20,6 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
 
-@event.listens_for(engine, "checkout")
-def ping_connection(dbapi_connection, connection_record, connection_proxy):
-    if connection_record.info.get("pool_disconnect"):
-        import redis
-        connection_record.info["pool_disconnect"] = False
-        raise redis.exceptions.ConnectionError("Connection was invalidated")
-
-
 def get_db():
     db = SessionLocal()
     try:

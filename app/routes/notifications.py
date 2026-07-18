@@ -84,8 +84,13 @@ manager = ConnectionManager()
 def _verify_ws_token(token: str) -> Optional[dict]:
     if not token:
         return None
-    payload = decode_access_token(token)
-    return payload
+    try:
+        payload = decode_access_token(token)
+        if payload and "sub" in payload:
+            int(payload["sub"])
+        return payload
+    except (ValueError, TypeError):
+        return None
 
 
 @router.websocket("/ws/notifications")
@@ -133,7 +138,15 @@ async def _listen_redis_pubsub(pubsub, websocket):
 @router.websocket("/ws/user/{user_id}")
 async def websocket_user_notifications(websocket: WebSocket, user_id: int, token: str = Query(None)):
     payload = _verify_ws_token(token)
-    if not payload or int(payload.get("sub", 0)) != user_id:
+    if not payload:
+        await websocket.accept()
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+    try:
+        token_user_id = int(payload.get("sub", 0))
+    except (ValueError, TypeError):
+        token_user_id = 0
+    if token_user_id != user_id:
         await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return

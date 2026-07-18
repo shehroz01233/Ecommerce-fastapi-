@@ -51,6 +51,7 @@ class NotificationService:
 
     @staticmethod
     def notify_price_drop(product_id: int, product_name: str, old_price: float, new_price: float):
+        discount = round((1 - new_price / old_price) * 100, 1) if old_price > 0 else 0
         redis_manager.publish(
             NotificationService.CHANNELS["price_drops"],
             {
@@ -59,7 +60,7 @@ class NotificationService:
                 "product_name": product_name,
                 "old_price": old_price,
                 "new_price": new_price,
-                "discount": round((1 - new_price / old_price) * 100, 1),
+                "discount": discount,
                 "timestamp": datetime.utcnow().isoformat()
             }
         )

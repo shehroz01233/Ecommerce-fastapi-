@@ -1,15 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 
 class CartCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(..., gt=0, le=100)
 
 
 class CartUpdate(BaseModel):
-    quantity: int
+    quantity: int = Field(..., gt=0, le=100)
 
 
 class CartOut(BaseModel):

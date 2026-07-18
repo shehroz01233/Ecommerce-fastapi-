@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from ..models.product import Product
 from ..schemas.product_schema import ProductCreate, ProductUpdate
 
@@ -24,9 +25,12 @@ def get_all_products(db: Session, search: str = None, category: str = None):
     query = db.query(Product)
 
     if search:
+        search_pattern = f"%{search}%"
         query = query.filter(
-            Product.name.ilike(f"%{search}%") |
-            Product.description.ilike(f"%{search}%")
+            or_(
+                Product.name.ilike(search_pattern),
+                Product.description.ilike(search_pattern)
+            )
         )
 
     if category and category != "All":

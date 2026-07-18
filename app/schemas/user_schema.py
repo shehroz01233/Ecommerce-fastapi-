@@ -1,11 +1,11 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 
 class UserCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=6, max_length=128)
 
 
 class UserLogin(BaseModel):
@@ -14,9 +14,9 @@ class UserLogin(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
-    password: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=6, max_length=128)
 
 
 class UserOut(BaseModel):

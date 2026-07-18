@@ -25,6 +25,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
             db.rollback()
             return {"error": f"Not enough stock for {product.name}"}
 
+        db.refresh(product)
         total_price += product.price * item.quantity
         product_cache[item.product_id] = product
 
@@ -66,6 +67,10 @@ def get_all_orders(db: Session):
 
 
 def update_order_status(db: Session, order_id: int, status: str):
+    valid_statuses = {"PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"}
+    if status not in valid_statuses:
+        return None
+
     order = db.query(Order).filter(Order.id == order_id).first()
 
     if not order:
