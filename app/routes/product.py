@@ -6,6 +6,7 @@ from ..core.database import get_db
 from ..core.security import require_admin
 from ..models.user import User
 from ..schemas.product_schema import ProductCreate, ProductUpdate, ProductOut
+from ..schemas.pagination import PaginationParams, PaginatedResponse
 from ..services import product_service
 from ..services.cache_service import cache_service
 from ..services.notification_service import notification_service
@@ -25,27 +26,36 @@ def create(product: ProductCreate, db: Session = Depends(get_db), current_user: 
     return new_product
 
 
-@router.get("/", response_model=list[ProductOut])
+@router.get("/", response_model=PaginatedResponse[ProductOut])
 def get_all(
     db: Session = Depends(get_db),
     search: Optional[str] = Query(None),
-    category: Optional[str] = Query(None)
+    category: Optional[str] = Query(None),
+    pagination: PaginationParams = Depends(),
 ):
-    cached = cache_service.get_products(search, category)
-    if cached:
-        return cached
-
     products = product_service.get_all_products(db, search=search, category=category)
-    result = [
-        {
-            "id": p.id, "name": p.name, "description": p.description,
-            "price": p.price, "stock": p.stock, "category": p.category,
-            "image_url": p.image_url
-        }
-        for p in products
-    ]
-    cache_service.set_products(result, search, category)
-    return result
+    total = len(products)
+    start = pagination.offset
+    end = start + pagination.limit
+    page_items = products[start:end]
+    pages = max(1, (total + pagination.limit - 1) // pagination.limit)
+
+    return PaginatedResponse(
+        items=[
+            {
+                "id": p.id, "name": p.name, "description": p.description,
+                "price": p.price, "stock": p.stock, "category": p.category,
+                "image_url": p.image_url
+            }
+            for p in page_items
+        ],
+        total=total,
+        page=pagination.page,
+        limit=pagination.limit,
+        pages=pages,
+        has_next=pagination.page < pages,
+        has_prev=pagination.page > 1,
+    )
 
 
 @router.get("/categories")

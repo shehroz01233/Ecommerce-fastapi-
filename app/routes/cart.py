@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from typing import List
 
 from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
 from ..schemas.cart_schema import CartCreate, CartUpdate, CartOut
+from ..schemas.pagination import PaginationParams, PaginatedResponse
 from ..models.cart import Cart
 from ..models.product import Product
 from ..services.cache_service import cache_service
@@ -82,11 +82,19 @@ def add_to_cart(cart: CartCreate, db: Session = Depends(get_db), current_user: U
     )
 
 
-@router.get("/", response_model=List[CartOut])
-def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/", response_model=PaginatedResponse[CartOut])
+def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), pagination: PaginationParams = Depends()):
     cached = cache_service.get_user_cart(current_user.id)
     if cached:
-        return cached
+        total = len(cached)
+        start = pagination.offset
+        end = start + pagination.limit
+        pages = max(1, (total + pagination.limit - 1) // pagination.limit)
+        return PaginatedResponse(
+            items=cached[start:end], total=total, page=pagination.page,
+            limit=pagination.limit, pages=pages,
+            has_next=pagination.page < pages, has_prev=pagination.page > 1,
+        )
 
     items = db.query(Cart).filter(Cart.user_id == current_user.id).all()
     result = []
@@ -100,7 +108,16 @@ def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_cur
         })
 
     cache_service.set_user_cart(current_user.id, result)
-    return result
+
+    total = len(result)
+    start = pagination.offset
+    end = start + pagination.limit
+    pages = max(1, (total + pagination.limit - 1) // pagination.limit)
+    return PaginatedResponse(
+        items=result[start:end], total=total, page=pagination.page,
+        limit=pagination.limit, pages=pages,
+        has_next=pagination.page < pages, has_prev=pagination.page > 1,
+    )
 
 
 @router.put("/{cart_id}", response_model=CartOut)

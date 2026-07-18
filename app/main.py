@@ -1,29 +1,47 @@
-import time
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .core.config import CORS_ORIGINS
 from .core.database import Base, engine
 from .core.rate_limit import RateLimitMiddleware
-from .core.middleware import RequestIDMiddleware, LoggingMiddleware, SlowRequestMiddleware
+from .core.middleware import (
+    RequestIDMiddleware, LoggingMiddleware, SlowRequestMiddleware,
+    SecurityHeadersMiddleware, BodySizeLimitMiddleware,
+)
 from .core.exceptions import register_exception_handlers
 
 from .routes import auth, product, cart, order, admin, user, review, wishlist, notifications, sse
+
+logger = logging.getLogger("ecommerce")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Application starting up...")
+    yield
+    logger.info("Application shutting down...")
+    engine.dispose()
 
 
 app = FastAPI(
     title="E-Commerce API",
     description="Full Stack E-Commerce Backend with Real-Time Features",
-    version="2.1.0"
+    version="2.2.0",
+    lifespan=lifespan,
 )
 
 register_exception_handlers(app)
 
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(SlowRequestMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,7 +64,7 @@ app.include_router(sse.router, prefix="/api")
 
 @app.get("/")
 def home():
-    return {"message": "E-Commerce API v2.1 is running successfully"}
+    return {"message": "E-Commerce API v2.2 is running successfully"}
 
 
 @app.get("/health")
@@ -68,7 +86,7 @@ def health_check():
         "database": db_status,
         "redis": redis_status,
         "service": "running",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "features": [
             "real-time-notifications",
             "redis-caching",
@@ -78,6 +96,8 @@ def health_check():
             "sse",
             "connection-pooling",
             "request-logging",
-            "global-error-handling"
+            "global-error-handling",
+            "security-headers",
+            "body-size-limit",
         ]
     }

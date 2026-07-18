@@ -6,6 +6,7 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
 from ..schemas.review_schema import ReviewCreate, ReviewOut
+from ..schemas.pagination import PaginationParams, PaginatedResponse
 from ..services import review_service
 from ..services.notification_service import notification_service
 from ..services.cache_service import cache_service
@@ -32,30 +33,48 @@ def create_review(data: ReviewCreate, background_tasks: BackgroundTasks, db: Ses
     )
 
 
-@router.get("/product/{product_id}", response_model=List[ReviewOut])
-def get_product_reviews(product_id: int, db: Session = Depends(get_db)):
+@router.get("/product/{product_id}", response_model=PaginatedResponse[ReviewOut])
+def get_product_reviews(product_id: int, db: Session = Depends(get_db), pagination: PaginationParams = Depends()):
     reviews = review_service.get_product_reviews(db, product_id)
-    return [
+    total = len(reviews)
+    start = pagination.offset
+    end = start + pagination.limit
+    pages = max(1, (total + pagination.limit - 1) // pagination.limit)
+    items = [
         ReviewOut(
             id=r.id, user_id=r.user_id, product_id=r.product_id,
             rating=r.rating, comment=r.comment, created_at=r.created_at,
             user_name=r.user.name if r.user else None
         )
-        for r in reviews
+        for r in reviews[start:end]
     ]
+    return PaginatedResponse(
+        items=items, total=total, page=pagination.page,
+        limit=pagination.limit, pages=pages,
+        has_next=pagination.page < pages, has_prev=pagination.page > 1,
+    )
 
 
-@router.get("/user/me", response_model=List[ReviewOut])
-def get_my_reviews(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/user/me", response_model=PaginatedResponse[ReviewOut])
+def get_my_reviews(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), pagination: PaginationParams = Depends()):
     reviews = review_service.get_user_reviews(db, current_user.id)
-    return [
+    total = len(reviews)
+    start = pagination.offset
+    end = start + pagination.limit
+    pages = max(1, (total + pagination.limit - 1) // pagination.limit)
+    items = [
         ReviewOut(
             id=r.id, user_id=r.user_id, product_id=r.product_id,
             rating=r.rating, comment=r.comment, created_at=r.created_at,
             user_name=current_user.name
         )
-        for r in reviews
+        for r in reviews[start:end]
     ]
+    return PaginatedResponse(
+        items=items, total=total, page=pagination.page,
+        limit=pagination.limit, pages=pages,
+        has_next=pagination.page < pages, has_prev=pagination.page > 1,
+    )
 
 
 @router.delete("/{review_id}")
